@@ -1,0 +1,28 @@
+version: '3.6'
+services:
+  api:
+    build: ./
+    restart: always
+    depends_on:
+      - database
+    container_name: 'abedmis'
+    environment:
+      - DATABASE_HOST=database
+      - PORT=3000
+    networks:
+        - ujere_net       
+  database:
+    image: mongo:latest
+    restart: always
+    container_name: 'database'
+    ports:
+        - 27017:27017
+    volumes:
+      - mongodata:/data/db  
+    networks:
+        - ujere_net     
+networks:
+  ujere_net:
+    driver: bridge          
+volumes:
+  mongodata: 

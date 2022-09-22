@@ -1,0 +1,141 @@
+version: "3.3"
+services:
+  reverse-proxy:
+    restart: always
+    image: traefik:v2.4
+    container_name: "traefik"
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--api.debug=false"
+      - "--providers.docker=true"
+      - "--log.LEVEL=DEBUG"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.websecure.address=:443"
+      - "--providers.docker.exposedbydefault=false"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge=true"
+      - "--certificatesresolvers.myresolver.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.myresolver.acme.email=umar.jere@gmail.com"
+      - "--certificatesresolvers.myresolver.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "443:443"
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "./letsencrypt:/letsencrypt"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+        - ujere_net   
+  rabbitmq:
+    restart: always
+    image: rabbitmq:3-management-alpine
+    container_name: 'rabbitmq'
+    hostname: rabmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=ujere
+      - RABBITMQ_DEFAULT_PASS=123456
+    ports:
+        - 5672:5672
+        - 15672:15672
+    volumes:
+        - ${PWD}/volume/rb:/var/lib/rabbitmq/mnesia/ 
+    networks:
+        - ujere_net       
+  database:
+    image: mongo:5.0
+    restart: always
+    container_name: 'mongodb'
+    ports:
+        - 27017:27017
+    volumes:
+      - mongodata:/data/db
+    networks:
+        - ujere_net  
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://database:27017/ 
+    networks:
+        - ujere_net        
+  backend:
+    restart: always
+    build: ./server
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.node-server.rule=Host(`abedmis.fmhds.gov.ng`)"
+      - "traefik.http.routers.node-server.entrypoints=websecure"
+      - "traefik.http.routers.node-server.tls.certresolver=myresolver"
+      - "traefik.http.routers.node-server.middlewares=redirect-to-https"
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"  
+      - "traefik.http.routers.redirs.entrypoints=web"  
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"  
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    depends_on:
+      - rabbitmq
+      - database
+    ports:
+      - 9000:9000  
+    volumes:
+     - ${PWD}/uploads:/app/uploads  
+    container_name: 'backendapp'
+    networks:
+        - ujere_net  
+  paypoint:
+    restart: always
+    build: ./paypoint
+    container_name: 'paypoint'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.paypoint.rule=Host(`paypoint.abedmis.fmhds.gov.ng`)"
+      - "traefik.http.routers.paypoint.entrypoints=websecure"
+      - "traefik.http.routers.paypoint.tls.certresolver=myresolver"
+      - "traefik.http.routers.paypoint.middlewares=redirect-to-https"
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"  
+      - "traefik.http.routers.redirs.entrypoints=web"  
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"  
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    ports:
+      - 5000:5000   
+    networks:
+        - ujere_net              
+  api:
+    restart: always
+    build: ./api
+    container_name: 'api'
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.paypoint.rule=Host(`abedmis.fmhds.gov.ng`)"
+      - "traefik.http.routers.paypoint.entrypoints=websecure"
+      - "traefik.http.routers.paypoint.tls.certresolver=myresolver"
+      - "traefik.http.routers.paypoint.middlewares=redirect-to-https"
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"  
+      - "traefik.http.routers.redirs.entrypoints=web"  
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"  
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+    ports:
+      - 3000:3000   
+    networks:
+        - ujere_net            
+  worker:
+    restart: always
+    build: ./sheetWorker
+    depends_on:
+      - rabbitmq
+    container_name: 'sheetworker'  
+    networks:
+        - ujere_net
+  dozzle:
+    container_name: dozzle
+    image: amir20/dozzle:latest
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 9999:8080                            
+networks:
+  ujere_net:
+    driver: bridge          
+volumes:
+  mongodata:    

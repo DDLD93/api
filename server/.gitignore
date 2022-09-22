@@ -1,0 +1,6 @@
+/node_modules
+/volume
+../volume
+../sheetWorker/volume
+../sheetWorker/node_modules
+../terminal/node_modules
